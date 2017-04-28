@@ -1,2 +1,0 @@
-# PyBoggle
-Python Boggle Game
