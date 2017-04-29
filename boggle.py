@@ -1,13 +1,29 @@
+from __future__ import print_function
 """
 Name: Simon Aizpurua
 FSUID: saa13b
 Course: CIS4930
 Date: 1/29/17
 """
-import random
+
+"""
+Imports
+"""
+
 import enchant
-from __future__ import print_function
-from PyQt5 import QtWidgets, QtCore, QtGui
+import sys
+import datetime
+import shelve
+import tempfile
+import random
+import uuid
+
+from PyQt5 import QtWidgets
+from PyQt5 import QtCore
+from PyQt5 import QtGui
+
+
+
 
 def DFS(word, board):
     """
@@ -44,7 +60,7 @@ def search_adj(word, pos, board, x, y, vis):
                             return True
     return False
 
-def wordChecker():
+def wordChecker(word):
     # First checking if the word is valid to be scored
     if len(word) >= 3:
         if dict.check(word): # checks if the word is even a word
@@ -59,11 +75,11 @@ def wordChecker():
                 points = 5
             elif length >= 8:
                 points = 11
-            print("Valid word! Worth: %s points" %points)
-            scoredWords.append(word)
+            # print("Valid word! Worth: %s points" %points)
+            # scoredWords.append(word)
             return points
         else: # not an actual word
-            print("Invalid Word.")
+            # print("Invalid Word.")
             points = 0
             return points
     else: # word is not valid
@@ -98,6 +114,7 @@ def generateBoard():
         board.append(choice)
     return board
 
+
 def printBoard():
     """
     Prints the generated board for the player to see
@@ -108,26 +125,316 @@ def printBoard():
     print (" %s %s %s %s " %(board [8], board [9], board [10], board [11]))
     print (" %s %s %s %s " %(board [12], board [13], board [14], board [15]))
 
+class boggleClient(QtWidgets.QMainWindow):
+    """
+    Boggle window, the game, launcher, and load window
+    """
+
+    def __init__(self):
+        QtWidgets.QMainWindow.__init__(self)
+        landing = landingPage() #Prompt the user
+        option = landing.exec_()
+
+        if option == QtWidgets.QMessageBox.Yes:
+            self.setup()
+            self.loadGame()
+        else:
+            self.setup()
+
+    def setup(self):
+        self.setWindowTitle('CIS4930 - BogglePy')
+        self.boggle_game = bogglePy(self)
+        self.setCentralWidget(self.boggle_game)
+        exit_status = QtWidgets.QAction('Exit', self)
+        exit_status.triggered.connect(QtWidgets.qApp.quit)
+        menu = self.menuBar()
+        menu.setNativeMenuBar(False)
+        fileMenu = menu.addMenu('File')
+        fileMenu.addAction(exit_status)
+        fileMenu.addAction("Save", self.saveGame)
+        fileMenu.addAction("Load", self.loadGame)
+
+        self.show()
+
+    def closeInstance(self, instance):
+        quitMsg = quitMsg()
+        reply = quitMsg.exec_()
+        if reply == QtWidgets.QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
+    def saveGame(self):
+        sv = shelve.open('boggle.save')
+        ids = open("boggle.ids", "a")
+        uid = str(uuid.uuid4())
+        ids.write(uid+"\n")
+        ids.close()
+        s[uid] =    {
+                        "when": datetime.datetime.now(),
+                        "title": datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S'),
+                        "uid": uid,
+                        "letters": self.boggle_game.board.letters,
+                        "words": self.boggle_game.list.words,
+                        "text": self.boggle_game.input.text(),
+                        "time": self.boggle_game.timer.time.remainingTime(),
+                        "ticker": self.boggle_game.timer.ticker.remainingTime(),
+                        "display": self.boggle_game.timer.display.intValue()
+                    }
+        sv.close()
+
+    def loadGame(self):
+        global suid
+        try:
+            sv = shelve.open('boggle.save')
+        except:
+            print("where are da saves man")
+            return
+
+        loadwin = loadHelper(self, sv)
+        loadwin.exec_()
+
+        self.boggle_game.board.letters = sv[suid]["letters"]
+        self.boggle_game.board.update()
+        self.boggle_game.list.words = sv[suid]["words"]
+        self.boggle_game.list.update()
+        self.boggle_game.input.setText(sv[suid]["text"])
+        self.boggle_game.input.setReadOnly(False)
+        self.boggle_game.timer.time.stop()
+        self.boggle_game.timer.time.start(sv[suid]["time"])
+        self.boggle_game.timer.ticker.stop()
+        self.boggle_game.timer.ticker.start(sv[suid]["ticker"])
+        self.boggle_game.timer.display.display(sv[suid]["display"])
+
+class loadHelper(QtWidgets.QDialog):
+    def __init__(self, parent, s):
+        QtWidgets.QDialog.__init__(self, parent)
+        self.setup(s)
+
+    def setup(self, s):
+        global suid
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        keys = []
+
+        try:
+            ids = open("boggle.ids", "r")
+        except:
+            print("something went wrong somewhere")
+            return
+
+        for n in ids.readlines():
+            keys.append(line.rstrip())
+        self.text = QtWidgets.QLabel("Select a file to load: ")
+        self.list = QtWidgets.QListWidget(self)
+        self.grid.addWidget(self.text,1,1,1,1)
+        self.grid.addWidget(self.list,2,1,4,1)
+        self.all = []
+        for n in keys:
+            print(s[n])
+            print(type(s[n]))
+            self.all.appent(s[n])
+        self.all = sorted(self.all, key=lambda k: k['when'], reverse=True)
+        self.list.itemClicked.connect(self.clicked)
+        for n in self.all:
+            self.list.addItem(save["title"])
+
+        def clicked(self, item):
+            global suid
+            suid = self.all[self.list.row(item)]["uid"]
+            self.close()
+
+
+class bogglePy(QtWidgets.QWidget):
+    def __init__(self, parent):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.setup()
+
+    def setup(self):
+        self.board = boggleGrid(self)
+        self.list = wordBank(self)
+        self.input = textField(self)
+        self.timer = gameTimer(self)
+
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+
+        self.grid.addWidget(self.board, 1, 1, 4, 4)
+        self.grid.addWidget(self.list, 1, 5, 4, 1)
+        self.grid.addWidget(self.input, 5, 1, 1, 5)
+        self.grid.addWidget(self.timer, 5, 5, 1, 1, QtCore.Qt.AlignRight)
+
+        self.input.returnPressed.connect(self.message_word())
+        self.input.returnPressed.connect(self.input.setup)
+        self.timer.time.timeout.connect(self.stopTimer)
+
+    def stopTimer(self):
+        global words
+        words = self.list.words
+        self.timer.time.stop()
+        self.input.setReadOnly(True)
+        score = 0
+        for n in words:
+            score = score + wordChecker(n)
+
+    def message_word(self):
+        def message():
+            self.list.addWord(self.input.text())
+        return message
+
+
+
+class boggleGrid(QtWidgets.QWidget):
+    def __init(self, parent):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.setup()
+
+    def setup(self):
+        self.letters = []
+        self.letters = generateBoard()
+        self.labels = []
+        for n in self.letters:
+            self.labels.append(QtWidgets.QLabel(n))
+
+        for label in self.labels:
+            label.setAlignment( QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter )
+            # label.setStyleSheet()
+
+        self.setFixedSize(500,500)
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+
+        self.grid.addWidget(self.labels[0], 1, 1, 1, 1)
+        self.grid.addWidget(self.labels[1], 1, 2, 1, 1)
+        self.grid.addWidget(self.labels[2], 1, 3, 1, 1)
+        self.grid.addWidget(self.labels[3], 1, 4, 1, 1)
+        self.grid.addWidget(self.labels[4], 2, 1, 1, 1)
+        self.grid.addWidget(self.labels[5], 2, 2, 1, 1)
+        self.grid.addWidget(self.labels[6], 2, 3, 1, 1)
+        self.grid.addWidget(self.labels[7], 2, 4, 1, 1)
+        self.grid.addWidget(self.labels[8], 3, 1, 1, 1)
+        self.grid.addWidget(self.labels[9], 3, 2, 1, 1)
+        self.grid.addWidget(self.labels[10], 3, 3, 1, 1)
+        self.grid.addWidget(self.labels[11], 3, 4, 1, 1)
+        self.grid.addWidget(self.labels[12], 4, 1, 1, 1)
+        self.grid.addWidget(self.labels[13], 4, 2, 1, 1)
+        self.grid.addWidget(self.labels[14], 4, 3, 1, 1)
+        self.grid.addWidget(self.labels[15], 4, 4, 1, 1)
+
+    def update(self):
+        counter = 0
+        for n in self.letters:
+            self.labels[counter].setText(n)
+            counter += 1
+
+class wordBank(QtWidgets.QTextEdit):
+    def __init__(self, parent):
+        QtWidgets.QTextEdit.__init__(self, parent)
+        self.setup()
+
+    def setup(self):
+        self.words = []
+        self.setFixedSize(300,500)
+        self.text = ""
+        self.setReadOnly(True)
+        self.setText(self.text)
+
+    def addWord(self, word):
+        if(word == ""):
+            return
+        self.words.append(word)
+        self.text = ""
+        for n in self.words:
+            self.text = self.text + word + "\n"
+        self.setText(self.text)
+
+    def update(self):
+        self.text = ""
+        for n in self.words:
+            self.text = self.text + word + "\n"
+        self.setText(self.text)
+class textField(QtWidgets.QLineEdit):
+    def __init__(self, parent):
+        QtWidgets.QLineEdit.__init__(self, parent)
+        self.setup()
+
+    def setup(self):
+        self.setText("")
+        self.setFixedWidth(690)
+class gameTimer(QtWidgets.QWidget):
+    def __init__(self, parent):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.setup()
+
+    def setup(self):
+        self.time = QtCore.QTimer()
+        self.ticker = QtCore.QTimer()
+        self.ticker.start(1000)
+        self.time.start(180000)
+
+        self.display = QtWidgets.QLCDNumber()
+        self.display.setSegmentStyle(self.display.Flat)
+        self.display.display(180)
+
+        self.ticker.timeout.connect(self.ticktime)
+        self.grid = QtWidgets.QGridLayout()
+        self.setLayout(self.grid)
+        self.display.setFixedWidth(100)
+        self.grid.addWidget(self.display,1,1,1,1)
+
+    def ticktime(self):
+        self.display.display(self.display.intValue() -1)
+        if(self.display.intValue() != 0):
+            self.ticker.start(1000)
+        else:
+            self.ticker.stop()
+
+    def restart(self):
+        self.time.start(180000)
+        self.ticker.start(1000)
+        self.display.display(180)
+
+class landingPage(QtWidgets.QMessageBox):
+    def __init__(self):
+        QtWidgets.QMessageBox.__init__(self)
+        self.setText("CIS4385 - Boggle - Would you like to load a game?")
+        self.addButton(self.No)
+        self.addButton(self.Yes)
+class endGame(QtWidgets.QMessageBox):
+    def __init__(self, score):
+        QtWidgets.QMessageBox.__init__(self)
+        self.setText("Your score: "+str(score)+"\nWould you like to play again?")
+        self.addButton(self.No)
+        self.addButton(self.Yes)
+class quitMsg(QtWidgets.QMessageBox):
+    def __init__(self):
+        QtWidgets.QMessageBox.__init__(self)
+        self.setText("Do you really want to quit?")
+        self.addButton(self.No)
+        self.addButton(self.Yes)
 
 if __name__ == '__main__':
     dict = enchant.Dict("en_US") # getting the dictionary ready to use
-    board = generateBoard() # assigns "board" to the generated board
-    printBoard() # shows the board to the player
+    # board = generateBoard() # assigns "board" to the generated board
+    # printBoard() # shows the board to the player
 
-    totalPoints = 0 # sets points to 0
-    scoredWords = [] # list to store all scored words so they cannot be used again
-    while True: # infinite loop for now to play the game
-        word = input("Input the word you would like to check for - type only X to exit\n")
-        word.upper() # changes the word to all uppercase, allows for easier use in the program
-        if word == "X" or word == "x": # exit function, also shows total points
-            print("You got a total of: %d points!" %totalPoints)
-            exit(0)
-        else: # plays the game
-            if DFS(word.upper(), board):
-                if any(word in s for s in scoredWords):
-                    print("Word has already been scored! Try another one.")
-                else:
-                    points = wordChecker()
-                    totalPoints = points + totalPoints
-            else:
-                print("Word: %s was not found on the grid." %word)
+    # totalPoints = 0 # sets points to 0
+    # scoredWords = [] # list to store all scored words so they cannot be used again
+    # while True: # infinite loop for now to play the game
+    #     word = input("Input the word you would like to check for - type only X to exit\n")
+    #     word.upper() # changes the word to all uppercase, allows for easier use in the program
+    #     if word == "X" or word == "x": # exit function, also shows total points
+    #         print("You got a total of: %d points!" %totalPoints)
+    #         exit(0)
+    #     else: # plays the game
+    #         if DFS(word.upper(), board):
+    #             if any(word in s for s in scoredWords):
+    #                 print("Word has already been scored! Try another one.")
+    #             else:
+    #                 points = wordChecker()
+    #                 totalPoints = points + totalPoints
+    #         else:
+    #             print("Word: %s was not found on the grid." %word)
+    app = QtWidgets.QApplication(sys.argv)
+    main_win = boggleClient()
+    app.exec_()
